@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+out/
+.next/
+.expo/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Database
+*.db
+prisma/migrations/dev/
+
+# Mobile
+ios/Pods/
+android/.gradle/
+android/build/
+
+# TypeScript
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/

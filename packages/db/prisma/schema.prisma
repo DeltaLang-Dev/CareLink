@@ -1,0 +1,171 @@
+// packages/db/prisma/schema.prisma
+// ─── CareLink Database Schema ─────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── User ──────────────────────────────────────────────────────────────────
+
+model User {
+  id         String   @id                  // Clerk user ID
+  email      String   @unique
+  name       String?
+  plan       Plan     @default(FREE)
+  totalSaved Int      @default(0)          // cents recovered across all appeals
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  bills      Bill[]
+
+  @@map("users")
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+// ── Bill ──────────────────────────────────────────────────────────────────
+
+model Bill {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider    String
+  serviceDate DateTime
+  totalAmount Int                          // cents
+  amountOwed  Int        @default(0)      // after insurance, cents
+  status      BillStatus @default(UPLOADED)
+  imageUrl    String?
+  pdfUrl      String?
+  parsedAt    DateTime?
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  lineItems   LineItem[]
+  errors      BillingError[]
+  appeals     Appeal[]
+
+  @@index([userId])
+  @@map("bills")
+}
+
+enum BillStatus {
+  UPLOADED
+  PARSING
+  PARSED
+  DISPUTED
+  RESOLVED
+}
+
+// ── Line Item ─────────────────────────────────────────────────────────────
+
+model LineItem {
+  id            String          @id @default(cuid())
+  billId        String
+  bill          Bill            @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  code          String
+  codeType      BillingCodeType @default(UNKNOWN)
+  description   String
+  plainEnglish  String
+  quantity      Int             @default(1)
+  billedAmount  Int                          // cents
+  allowedAmount Int?                         // cents
+  medicareRate  Int?                         // cents
+  patientOwes   Int                          // cents
+  flagged       Boolean         @default(false)
+  flagReason    String?
+
+  createdAt     DateTime        @default(now())
+
+  @@index([billId])
+  @@map("line_items")
+}
+
+enum BillingCodeType {
+  CPT
+  ICD10
+  HCPCS
+  DRG
+  NDC
+  UNKNOWN
+}
+
+// ── Billing Error ─────────────────────────────────────────────────────────
+
+model BillingError {
+  id                  String           @id @default(cuid())
+  billId              String
+  bill                Bill             @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  type                BillingErrorType
+  severity            ErrorSeverity    @default(WARNING)
+  description         String
+  lineItemIds         String[]
+  estimatedOvercharge Int?             // cents
+
+  createdAt           DateTime         @default(now())
+
+  appeals             Appeal[]
+
+  @@index([billId])
+  @@map("billing_errors")
+}
+
+enum BillingErrorType {
+  DUPLICATE_CHARGE
+  UNBUNDLING
+  UPCODING
+  WRONG_PATIENT
+  OUTSIDE_NETWORK
+  EXPERIMENTAL_TREATMENT
+  DATE_MISMATCH
+  QUANTITY_ERROR
+}
+
+enum ErrorSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+// ── Appeal ────────────────────────────────────────────────────────────────
+
+model Appeal {
+  id           String       @id @default(cuid())
+  billId       String
+  bill         Bill         @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  errors       BillingError[]
+  status       AppealStatus @default(DRAFT)
+  draftLetter  String       @db.Text
+  submittedAt  DateTime?
+  resolvedAt   DateTime?
+  outcome      String?
+  amountSaved  Int?         // cents
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([billId])
+  @@map("appeals")
+}
+
+enum AppealStatus {
+  DRAFT
+  READY
+  SUBMITTED
+  PENDING
+  APPROVED
+  DENIED
+  ESCALATED
+}
